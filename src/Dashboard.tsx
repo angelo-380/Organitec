@@ -1,5 +1,5 @@
-import { useMemo } from 'react';
-import { Clock, BookOpen, CheckCircle, AlertTriangle, Calendar } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Clock, BookOpen, CheckCircle, AlertTriangle, Calendar, Check } from 'lucide-react';
 
 // Definimos la estructura para que TypeScript no lance errores 'any'
 interface Task {
@@ -54,11 +54,21 @@ const mockTasks: Task[] = [
 ];
 
 export default function Dashboard() {
-  const tasks = mockTasks;
+  // 1. EL CAMBIO CLAVE: Ahora 'tasks' es un estado que React puede observar
+  const [tasks, setTasks] = useState<Task[]>(mockTasks);
 
+  // 2. Función para completar/desmarcar tareas
+  const toggleTaskCompletion = (id: string) => {
+    setTasks(prevTasks => 
+      prevTasks.map(task => 
+        task.id_canvas === id ? { ...task, completada: !task.completada } : task
+      )
+    );
+  };
+
+  // 3. Los cálculos ahora dependen del estado 'tasks'
   const { pending, completed, urgent } = useMemo<DashboardData>(() => {
     const now = new Date('2026-05-14T21:31:52-05:00'); 
-    
     let pendingCount = 0;
     let completedCount = 0;
     const urgentTasks: (Task & { hoursLeft: number })[] = [];
@@ -78,9 +88,8 @@ export default function Dashboard() {
     });
 
     urgentTasks.sort((a, b) => a.hoursLeft - b.hoursLeft);
-
     return { pending: pendingCount, completed: completedCount, urgent: urgentTasks };
-  }, [tasks]);
+  }, [tasks]); // <--- useMemo se vuelve a ejecutar si 'tasks' cambia
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-8 font-sans text-slate-800">
@@ -90,16 +99,15 @@ export default function Dashboard() {
         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-slate-900">Hola, Estudiante 👋</h1>
-            <p className="text-slate-500 mt-1">Aquí tienes el resumen de tu estado académico hoy.</p>
+            <p className="text-slate-500 mt-1">Gestiona tus tareas y reduce el estrés.</p>
           </div>
-          <button className="bg-slate-900 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-slate-800 transition-colors shadow-sm w-full sm:w-auto">
+          <button className="bg-slate-900 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-slate-800 transition-all active:scale-95 shadow-sm w-full sm:w-auto">
             + Nueva Tarea
           </button>
         </header>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          
-          {/* Carga Académica (Resumen) */}
+          {/* Carga Académica */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col justify-center col-span-1 md:col-span-2">
             <h2 className="text-lg font-semibold text-slate-700 flex items-center gap-2 mb-6">
               <BookOpen className="w-5 h-5 text-indigo-500" />
@@ -117,7 +125,6 @@ export default function Dashboard() {
               </div>
             </div>
             
-            {/* Barra de progreso */}
             <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
               <div 
                 className="bg-indigo-500 h-2.5 rounded-full transition-all duration-500" 
@@ -126,7 +133,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Acceso rápido al Plan de Estudio */}
+          {/* Plan de Estudio */}
           <div className="bg-linear-to-br from-indigo-500 to-purple-600 rounded-xl shadow-md p-6 text-white flex flex-col justify-between">
             <div>
               <h2 className="text-lg font-semibold flex items-center gap-2 mb-2">
@@ -135,15 +142,14 @@ export default function Dashboard() {
               </h2>
               <p className="text-indigo-100 text-sm mt-2 leading-relaxed">
                 {urgent.length > 0 
-                  ? 'Tienes tareas prioritarias hoy. Es momento de enfocar tus bloques de estudio.' 
-                  : 'No hay entregas urgentes. Buen momento para adelantar material.'}
+                  ? `Tienes ${urgent.length} tareas urgentes. Enfócate en terminar lo más próximo.` 
+                  : '¡Excelente! No tienes nada urgente por ahora.'}
               </p>
             </div>
             <button className="mt-6 bg-white text-indigo-600 w-full py-2.5 rounded-lg font-semibold hover:bg-indigo-50 transition-colors shadow-sm">
               Ver Plan Sugerido
             </button>
           </div>
-
         </div>
 
         {/* Tareas Urgentes */}
@@ -156,17 +162,20 @@ export default function Dashboard() {
           {urgent.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {urgent.map(task => (
-                <div key={task.id_canvas} className="bg-white rounded-xl p-5 border border-rose-200 shadow-sm relative overflow-hidden group hover:border-rose-300 transition-colors">
-                  {/* Indicador visual rojo */}
+                <div key={task.id_canvas} className="bg-white rounded-xl p-5 border border-rose-200 shadow-sm relative overflow-hidden group hover:border-rose-300 transition-all">
                   <div className="absolute top-0 left-0 w-1.5 h-full bg-rose-500"></div>
                   
                   <div className="flex justify-between items-start mb-3">
                     <span className="text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-100 px-2 py-1 rounded-md">
                       Quedan {Math.max(0, Math.ceil(task.hoursLeft))}h
                     </span>
-                    <span className="text-xs font-medium text-slate-600 bg-slate-100 px-2 py-1 rounded-md">
-                      Importancia: {task.importancia}
-                    </span>
+                    {/* BOTÓN INTERACTIVO */}
+                    <button 
+                      onClick={() => toggleTaskCompletion(task.id_canvas)}
+                      className="text-slate-300 hover:text-emerald-500 transition-colors"
+                    >
+                      <CheckCircle className="w-6 h-6" />
+                    </button>
                   </div>
                   
                   <h3 className="font-semibold text-slate-800 line-clamp-2 mb-1">{task.title}</h3>
@@ -177,8 +186,11 @@ export default function Dashboard() {
                       <Clock className="w-4 h-4 text-slate-400" />
                       {new Date(task.due_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
                     </div>
-                    <button className="text-indigo-600 hover:text-indigo-700 font-medium text-sm flex items-center gap-1">
-                      Iniciar <span className="opacity-0 group-hover:opacity-100 transition-opacity">→</span>
+                    <button 
+                      onClick={() => toggleTaskCompletion(task.id_canvas)}
+                      className="text-indigo-600 hover:text-indigo-700 font-medium text-sm"
+                    >
+                      Completar →
                     </button>
                   </div>
                 </div>
@@ -187,12 +199,11 @@ export default function Dashboard() {
           ) : (
             <div className="bg-white rounded-xl border border-dashed border-slate-300 p-8 text-center">
               <CheckCircle className="w-12 h-12 text-emerald-400 mx-auto mb-3" />
-              <h3 className="text-lg font-medium text-slate-700">¡Todo bajo control!</h3>
-              <p className="text-slate-500 mt-1">No tienes entregas urgentes en las próximas 48 horas.</p>
+              <h3 className="text-lg font-medium text-slate-700">¡Todo al día!</h3>
+              <p className="text-slate-500 mt-1">No hay tareas urgentes pendientes.</p>
             </div>
           )}
         </div>
-
       </div>
     </div>
   );
