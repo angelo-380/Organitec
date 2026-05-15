@@ -1,8 +1,26 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { Clock, BookOpen, CheckCircle, AlertTriangle, Calendar } from 'lucide-react';
 
-// [ESTRUCTURA DE DATOS - CANVAS SIMPLIFICADO]
-const mockTasks = [
+// Definimos la estructura para que TypeScript no lance errores 'any'
+interface Task {
+  id_canvas: string;
+  title: string;
+  course_name: string;
+  due_at: string;
+  points_possible: number;
+  dificultad: 'baja' | 'media' | 'alta'; 
+  importancia: number;
+  completada: boolean;
+}
+
+// Interfaz para el resultado del cálculo de tareas
+interface DashboardData {
+  pending: number;
+  completed: number;
+  urgent: (Task & { hoursLeft: number })[];
+}
+
+const mockTasks: Task[] = [
   {
     "id_canvas": "12345",
     "title": "Proyecto Final de Programación",
@@ -17,7 +35,7 @@ const mockTasks = [
     "id_canvas": "12346",
     "title": "Control de Lectura 3",
     "course_name": "Ingeniería de Software",
-    "due_at": "2026-05-15T23:59:59Z", // Urgente (menos de 48h)
+    "due_at": "2026-05-15T23:59:59Z",
     "points_possible": 10,
     "dificultad": "media", 
     "importancia": 4,
@@ -38,14 +56,12 @@ const mockTasks = [
 export default function Dashboard() {
   const tasks = mockTasks;
 
-  const { pending, completed, urgent } = useMemo(() => {
-    // Usamos una fecha representativa actual para calcular las urgencias correctamente
-    // basándonos en tu timezone: 2026-05-14
+  const { pending, completed, urgent } = useMemo<DashboardData>(() => {
     const now = new Date('2026-05-14T21:31:52-05:00'); 
     
     let pendingCount = 0;
     let completedCount = 0;
-    const urgentTasks = [];
+    const urgentTasks: (Task & { hoursLeft: number })[] = [];
 
     tasks.forEach(task => {
       if (task.completada) {
@@ -55,14 +71,12 @@ export default function Dashboard() {
         const dueDate = new Date(task.due_at);
         const hoursDiff = (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
         
-        // Menos de 48 horas y aún no vencida (o vencida recientemente)
         if (hoursDiff <= 48 && hoursDiff > -24) {
           urgentTasks.push({ ...task, hoursLeft: hoursDiff });
         }
       }
     });
 
-    // Ordenamos las urgentes por las que tienen menos tiempo restante
     urgentTasks.sort((a, b) => a.hoursLeft - b.hoursLeft);
 
     return { pending: pendingCount, completed: completedCount, urgent: urgentTasks };
@@ -113,7 +127,7 @@ export default function Dashboard() {
           </div>
 
           {/* Acceso rápido al Plan de Estudio */}
-          <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-md p-6 text-white flex flex-col justify-between">
+          <div className="bg-linear-to-br from-indigo-500 to-purple-600 rounded-xl shadow-md p-6 text-white flex flex-col justify-between">
             <div>
               <h2 className="text-lg font-semibold flex items-center gap-2 mb-2">
                 <Calendar className="w-5 h-5 text-indigo-100" />
