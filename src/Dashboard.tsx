@@ -139,20 +139,29 @@ export default function Dashboard() {
           </button>
         </header>
 
-        {/* HU-05: VISUALIZACIÓN DE TAREAS ATRASADAS */}
+        {/* --- SECCIÓN TAREAS VENCIDAS (HU-05 + HU-06) --- */}
         {data.overdue.length > 0 && (
           <section className="bg-rose-50 border border-rose-200 rounded-2xl p-5 shadow-sm">
             <h2 className="text-rose-700 font-bold flex items-center gap-2 mb-4 text-sm">
-              <AlertTriangle size={18} /> TAREAS VENCIDAS (HU-05)
+              <AlertTriangle size={18} /> TAREAS VENCIDAS (Prioridad Crítica)
             </h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {data.overdue.map(t => (
                 <div key={t.id_canvas} className="bg-white border border-rose-100 p-3 rounded-xl flex justify-between items-center shadow-xs">
                   <div>
-                    <p className="font-bold text-slate-800 text-sm">{t.title}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-slate-800 text-sm">{t.title}</p>
+                      {/* Badge unificado con la sección de arriba */}
+                      <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${
+                        t.dificultad === 'alta' ? 'bg-rose-100 text-rose-600' : 
+                        t.dificultad === 'media' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'
+                      }`}>
+                        {t.dificultad}
+                      </span>
+                    </div>
                     <p className="text-xs text-slate-400">{t.course_name}</p>
                   </div>
-                  <button onClick={() => setTasks(tasks.map(x => x.id_canvas === t.id_canvas ? {...x, completada: true} : x))} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg">
+                  <button onClick={() => setTasks(tasks.map(x => x.id_canvas === t.id_canvas ? {...x, completada: true} : x))} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors">
                     <CheckCircle size={20} />
                   </button>
                 </div>
@@ -195,7 +204,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* HU-10: TAREAS URGENTES */}
+        {/* --- SECCIÓN PRIORIDAD INMEDIATA (HU-10 + HU-06/07) --- */}
         <div>
           <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 mb-4">
             <Star className="w-5 h-5 text-amber-500 fill-amber-500" /> Prioridad Inmediata
@@ -204,12 +213,20 @@ export default function Dashboard() {
             {data.urgent.map(task => (
               <div key={task.id_canvas} className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm relative group hover:border-slate-300 transition-all">
                 <div className="flex justify-between items-start mb-3">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${task.importancia >= 4 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
-                    Prioridad {task.importancia}
-                  </span>
+                  <div className="flex gap-2">
+                    {/* Texto completo "Prioridad" y diseño unificado */}
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${task.importancia >= 4 ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'}`}>
+                      Prioridad {task.importancia}
+                    </span>
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                      task.dificultad === 'alta' ? 'bg-rose-100 text-rose-600' : 
+                      task.dificultad === 'media' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'
+                    }`}>
+                      {task.dificultad}
+                    </span>
+                  </div>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button onClick={() => openEdit(task)} className="text-slate-400 hover:text-indigo-600"><Edit3 size={16}/></button>
-                    <button onClick={() => setTasks(tasks.filter(t => t.id_canvas !== task.id_canvas))} className="text-slate-400 hover:text-rose-500"><Trash2 size={16}/></button>
                   </div>
                 </div>
                 <h3 className="font-bold text-slate-800 mb-1 line-clamp-1">{task.title}</h3>
@@ -226,7 +243,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* HU-04: ORGANIZACIÓN POR CURSOS */}
+        {/* HU-04: ORGANIZACIÓN POR CURSOS (CON MEJORAS DE USABILIDAD Y HU-06) */}
         <section className="space-y-4">
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-bold text-slate-800">📚 Mis Cursos</h2>
@@ -242,14 +259,40 @@ export default function Dashboard() {
                   <h3 className="font-bold text-indigo-600 text-sm uppercase tracking-wider">{course}</h3>
                   <span className="text-[10px] font-bold text-slate-400">{courseTasks.length} Tareas</span>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {courseTasks.filter(t => filter === 'todas' || (filter === 'pendientes' && !t.completada)).map(t => (
-                    <div key={t.id_canvas} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 transition-colors group">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${t.completada ? 'bg-emerald-400' : 'bg-amber-400'}`} />
-                        <span className={`text-sm ${t.completada ? 'line-through text-slate-300' : 'text-slate-600 font-medium'}`}>{t.title}</span>
+                    <div key={t.id_canvas} className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition-colors group border border-transparent hover:border-slate-100">
+                      <div className="flex items-center gap-3">
+                        {/* MEJORA: BOTÓN DE COMPLETADO RÁPIDO */}
+                        <button 
+                          onClick={() => setTasks(tasks.map(task => task.id_canvas === t.id_canvas ? {...task, completada: !task.completada} : task))}
+                          className={`transition-colors ${t.completada ? 'text-emerald-500' : 'text-slate-300 hover:text-emerald-400'}`}
+                        >
+                          <CheckCircle size={20} fill={t.completada ? "currentColor" : "none"} />
+                        </button>
+                        
+                        <div className="flex flex-col">
+                          <span className={`text-sm font-medium ${t.completada ? 'line-through text-slate-300' : 'text-slate-700'}`}>
+                            {t.title}
+                          </span>
+                          {/* MEJORA HU-06: VISIBILIDAD DE DIFICULTAD */}
+                          <span className={`text-[9px] font-bold uppercase mt-0.5 ${
+                            t.dificultad === 'alta' ? 'text-rose-500' : 
+                            t.dificultad === 'media' ? 'text-amber-500' : 'text-emerald-500'
+                          }`}>
+                            • {t.dificultad}
+                          </span>
+                        </div>
                       </div>
-                      <button onClick={() => openEdit(t)} className="opacity-0 group-hover:opacity-100 text-slate-400"><Edit3 size={14}/></button>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          {new Date(t.due_at).toLocaleDateString()}
+                        </span>
+                        <button onClick={() => openEdit(t)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-indigo-600 p-1 transition-all">
+                          <Edit3 size={14}/>
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
