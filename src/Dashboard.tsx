@@ -1,358 +1,461 @@
-import { useMemo, useState } from 'react';
-import { Clock, BookOpen, CheckCircle, AlertTriangle, Calendar, X, Edit3, Trash2, Star } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Clock, BookOpen, CheckCircle, AlertTriangle, Calendar, Trash2, Edit, Plus, X, Brain, Target } from 'lucide-react';
 
-// --- ESTRUCTURA DE DATOS ---
 interface Task {
   id_canvas: string;
   title: string;
   course_name: string;
   due_at: string;
   points_possible: number;
-  dificultad: 'baja' | 'media' | 'alta'; 
-  importancia: number;
+  dificultad: 'baja' | 'media' | 'alta';
+  importancia: number; 
   completada: boolean;
 }
 
-interface DashboardData {
-  pending: number;
-  completed: number;
-  urgent: (Task & { hoursLeft: number })[];
-  overdue: Task[];                     
-  tasksByCourse: Record<string, Task[]>; 
-}
-
-const mockTasks: Task[] = [
-  {
-    "id_canvas": "1",
-    "title": "Proyecto Final: React Dashboard",
-    "course_name": "Ingeniería de Software",
-    "due_at": "2026-05-10T23:59:59Z", // Tarea atrasada (HU-05)
-    "points_possible": 20,
-    "dificultad": "alta", 
-    "importancia": 5,
-    "completada": false
-  },
-  {
-    "id_canvas": "2",
-    "title": "Control de Lectura 3",
-    "course_name": "Ingeniería de Software",
-    "due_at": "2026-05-16T23:59:59Z", // Tarea urgente (HU-10)
-    "points_possible": 10,
-    "dificultad": "media", 
-    "importancia": 4,
-    "completada": false
-  }
-];
+// Fechas dinámicas basadas en el momento actual para evitar bloqueos algorítmicos
+const getMockTasks = (): Task[] => {
+  const now = new Date();
+  return [
+    {
+      id_canvas: "12345",
+      title: "Proyecto Final de Programación",
+      course_name: "Programación Orientada a Objetos",
+      due_at: new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000).toISOString(), // Vence en 5 días
+      points_possible: 20,
+      dificultad: "alta", 
+      importancia: 5,
+      completada: false
+    },
+    {
+      id_canvas: "12346",
+      title: "Control de Lectura 3",
+      course_name: "Ingeniería de Software",
+      due_at: new Date(now.getTime() + 31 * 60 * 60 * 1000).toISOString(), // Vence en 31 horas
+      points_possible: 10,
+      dificultad: "media", 
+      importancia: 4,
+      completada: false
+    },
+    {
+      id_canvas: "12348",
+      title: "Ensayo sobre Ética",
+      course_name: "Ética Profesional",
+      due_at: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(), // Atrasada por 1 día
+      points_possible: 10,
+      dificultad: "baja", 
+      importancia: 2,
+      completada: false
+    }
+  ];
+};
 
 export default function Dashboard() {
-  const [tasks, setTasks] = useState<Task[]>(mockTasks);
-  const [filter, setFilter] = useState<'todas' | 'pendientes'>('todas'); // HU-04
-  
-  // --- ESTADOS DEL FORMULARIO ---
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [newTitle, setNewTitle] = useState('');
-  const [newCourse, setNewCourse] = useState('');
-  const [newDate, setNewDate] = useState('');
-  const [newDiff, setNewDiff] = useState<'baja' | 'media' | 'alta'>('media');
-  const [newImp, setNewImp] = useState(3);
-
-  // --- LÓGICA DE PROCESAMIENTO (Cerebro del Sistema) ---
-  const data = useMemo<DashboardData>(() => {
-    const now = new Date();
-    let pendingCount = 0;
-    let completedCount = 0;
-    const urgentTasks: (Task & { hoursLeft: number })[] = [];
-    const overdueTasks: Task[] = [];
-    const groups: Record<string, Task[]> = {};
-
-    tasks.forEach(task => {
-      task.completada ? completedCount++ : pendingCount++;
-
-      // Agrupación por cursos (HU-04)
-      if (!groups[task.course_name]) groups[task.course_name] = [];
-      groups[task.course_name].push(task);
-
-      const dueDate = new Date(task.due_at);
-      const hoursDiff = (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
-      
-      if (!task.completada) {
-        if (hoursDiff < 0) overdueTasks.push(task); // HU-05
-        else if (hoursDiff <= 48) urgentTasks.push({ ...task, hoursLeft: hoursDiff }); // HU-10
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    try {
+      const savedTasks = localStorage.getItem('organitec_tasks');
+      if (savedTasks) {
+        return JSON.parse(savedTasks);
       }
-    });
+    } catch (error) {
+      console.error("Error al leer el localStorage:", error);
+    }
+    return getMockTasks();
+  });
 
-    // Ordenar por importancia (HU-07) y luego por tiempo (HU-08)
-    urgentTasks.sort((a, b) => b.importancia - a.importancia || a.hoursLeft - b.hoursLeft);
-    
-    return { pending: pendingCount, completed: completedCount, urgent: urgentTasks, overdue: overdueTasks, tasksByCourse: groups };
+  useEffect(() => {
+    localStorage.setItem('organitec_tasks', JSON.stringify(tasks));
   }, [tasks]);
 
-  // --- FUNCIONES MANEJADORAS ---
-  const openEdit = (task: Task) => {
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+  const [filterCourse, setFilterCourse] = useState<string>('TODAS');
+
+  const deleteTask = (id: string) => {
+    setTasks(prev => prev.filter(t => t.id_canvas !== id));
+  };
+
+  const toggleComplete = (id: string) => {
+    setTasks(prev => prev.map(t => t.id_canvas === id ? { ...t, completada: !t.completada } : t));
+  };
+
+  const openEditModal = (task: Task) => {
     setEditingTask(task);
-    setNewTitle(task.title);
-    setNewCourse(task.course_name);
-    setNewDate(new Date(task.due_at).toISOString().slice(0, 16));
-    setNewDiff(task.dificultad);
-    setNewImp(task.importancia);
-    setIsFormOpen(true);
+    setIsTaskModalOpen(true);
   };
 
-  const closeForm = () => {
-    setIsFormOpen(false);
+  const closeTaskModal = () => {
+    setIsTaskModalOpen(false);
     setEditingTask(null);
-    setNewTitle(''); setNewCourse(''); setNewDate('');
-    setNewDiff('media'); setNewImp(3);
   };
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSaveTask = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const taskData = {
-      title: newTitle,
-      course_name: newCourse,
-      due_at: new Date(newDate).toISOString(),
-      dificultad: newDiff,
-      importancia: newImp,
+    const formData = new FormData(e.currentTarget);
+    
+    // Forzar formateo correcto a ISO string para evitar desfases de fechas
+    const inputDate = formData.get('due_at') as string;
+    const formattedDate = inputDate ? new Date(inputDate).toISOString() : new Date().toISOString();
+
+    const newTask: Task = {
+      id_canvas: editingTask ? editingTask.id_canvas : Date.now().toString(),
+      title: formData.get('title') as string,
+      course_name: formData.get('course_name') as string,
+      due_at: formattedDate,
+      points_possible: 20,
+      dificultad: formData.get('dificultad') as 'baja' | 'media' | 'alta',
+      importancia: Number(formData.get('importancia')),
+      completada: editingTask ? editingTask.completada : false
     };
 
     if (editingTask) {
-      setTasks(tasks.map(t => t.id_canvas === editingTask.id_canvas ? { ...t, ...taskData } : t));
+      setTasks(prev => prev.map(t => t.id_canvas === editingTask.id_canvas ? newTask : t));
     } else {
-      setTasks([...tasks, { ...taskData, id_canvas: Date.now().toString(), points_possible: 10, completada: false }]);
+      setTasks(prev => [...prev, newTask]);
     }
-    closeForm();
+    closeTaskModal();
   };
 
+  // Cálculos reactivos de secciones
+  const { pending, completed, urgent, overdue, courses } = useMemo(() => {
+    const now = new Date();
+    let pendingCount = 0;
+    let completedCount = 0;
+    const urgentTasksTemp: (Task & { hoursLeft: number })[] = [];
+    const overdueTasksTemp: Task[] = [];
+    const uniqueCourses = new Set<string>();
+
+    tasks.forEach(task => {
+      uniqueCourses.add(task.course_name);
+      if (task.completada) {
+        completedCount++;
+      } else {
+        pendingCount++;
+        const dueDate = new Date(task.due_at);
+        const hoursDiff = (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+        
+        if (hoursDiff < 0) {
+          overdueTasksTemp.push(task);
+        } else if (hoursDiff <= 48) {
+          urgentTasksTemp.push({ ...task, hoursLeft: hoursDiff });
+        }
+      }
+    });
+
+    return { 
+      pending: pendingCount, 
+      completed: completedCount, 
+      urgent: urgentTasksTemp.sort((a, b) => a.hoursLeft - b.hoursLeft), 
+      overdue: overdueTasksTemp,
+      courses: ['TODAS', ...Array.from(uniqueCourses)]
+    };
+  }, [tasks]);
+
+  // Algoritmo HU-09 Ponderado corregido
+  const suggestedTask = useMemo(() => {
+    const pendingTasksList = tasks.filter(t => !t.completada);
+    if (pendingTasksList.length === 0) return null;
+
+    const now = new Date();
+    const scoredTasks = pendingTasksList.map(t => {
+      const diffMap = { alta: 3, media: 2, baja: 1 };
+      const diffScore = diffMap[t.dificultad] || 1;
+      const impScore = t.importancia;
+      
+      const dueDate = new Date(t.due_at);
+      const hoursDiff = (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+      
+      let timeScore = 0;
+      if (hoursDiff < 0) timeScore = 15; // Mayor peso si ya expiró
+      else if (hoursDiff <= 24) timeScore = 10;
+      else if (hoursDiff <= 48) timeScore = 5;
+
+      return { ...t, score: diffScore + impScore + timeScore };
+    });
+
+    return [...scoredTasks].sort((a, b) => b.score - a.score)[0];
+  }, [tasks]);
+
+  // Bloques de estudio de la HU-11
+  const studyBlocks = useMemo(() => {
+    const tasksToPlan = [...overdue, ...urgent].slice(0, 4);
+    if (tasksToPlan.length === 0 && suggestedTask) {
+      tasksToPlan.push(suggestedTask);
+    }
+    return tasksToPlan.map(t => {
+      let pomodoros = t.dificultad === 'alta' ? 4 : t.dificultad === 'media' ? 2 : 1;
+      return { task: t, pomodoros, time: `${pomodoros * 30} min` };
+    });
+  }, [urgent, overdue, suggestedTask]);
+
+  // Filtrado de la lista principal por curso
+  const filteredTasks = useMemo(() => {
+    if (filterCourse === 'TODAS') return tasks;
+    return tasks.filter(t => t.course_name === filterCourse);
+  }, [tasks, filterCourse]);
+
   return (
-    <div className="min-h-screen bg-slate-50 p-4 sm:p-8 font-sans text-slate-800">
+    <div className="min-h-screen bg-slate-50 p-4 sm:p-8 font-sans text-slate-800 pb-20">
       <div className="max-w-5xl mx-auto space-y-8">
         
-        {/* HEADER */}
+        {/* Header */}
         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-slate-900">Hola, Estudiante 👋</h1>
-            <p className="text-slate-500 mt-1">Gestiona tus tareas y prioriza tu estudio.</p>
+            <p className="text-slate-500 mt-1">Aquí tienes el resumen de tu estado académico hoy.</p>
           </div>
-          <button onClick={() => setIsFormOpen(true)} className="bg-slate-900 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-slate-800 transition-all active:scale-95 shadow-sm w-full sm:w-auto">
-            + Nueva Tarea
+          <button 
+            onClick={() => setIsTaskModalOpen(true)}
+            className="bg-slate-900 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-slate-800 transition-colors shadow-sm w-full sm:w-auto flex items-center justify-center gap-2"
+          >
+            <Plus className="w-5 h-5" /> Nueva Tarea
           </button>
         </header>
 
-        {/* --- SECCIÓN TAREAS VENCIDAS (HU-05 + HU-06) --- */}
-        {data.overdue.length > 0 && (
-          <section className="bg-rose-50 border border-rose-200 rounded-2xl p-5 shadow-sm">
-            <h2 className="text-rose-700 font-bold flex items-center gap-2 mb-4 text-sm">
-              <AlertTriangle size={18} /> TAREAS VENCIDAS (Prioridad Crítica)
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {data.overdue.map(t => (
-                <div key={t.id_canvas} className="bg-white border border-rose-100 p-3 rounded-xl flex justify-between items-center shadow-xs">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-bold text-slate-800 text-sm">{t.title}</p>
-                      {/* Badge unificado con la sección de arriba */}
-                      <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                        t.dificultad === 'alta' ? 'bg-rose-100 text-rose-600' : 
-                        t.dificultad === 'media' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'
-                      }`}>
-                        {t.dificultad}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400">{t.course_name}</p>
-                  </div>
-                  <button onClick={() => setTasks(tasks.map(x => x.id_canvas === t.id_canvas ? {...x, completada: true} : x))} className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors">
-                    <CheckCircle size={20} />
-                  </button>
-                </div>
-              ))}
+        {/* HU-09: Cuadro de Sugerencia */}
+        {suggestedTask && (
+          <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-5 flex items-start gap-4 shadow-sm">
+            <div className="bg-indigo-100 p-2 rounded-full mt-1">
+              <Brain className="w-6 h-6 text-indigo-600" />
             </div>
-          </section>
+            <div>
+              <h3 className="font-semibold text-indigo-900">Basado en tus prioridades, deberías empezar con:</h3>
+              <p className="text-indigo-700 text-lg font-bold mt-1 underline decoration-2">
+                {suggestedTask.title}
+              </p>
+              <p className="text-xs text-indigo-500 mt-1">Curso: {suggestedTask.course_name} | Dificultad: {suggestedTask.dificultad}</p>
+            </div>
+          </div>
         )}
 
-        {/* STATS DASHBOARD */}
+        {/* Métricas */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 col-span-1 md:col-span-2">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col justify-center col-span-1 md:col-span-2">
             <h2 className="text-lg font-semibold text-slate-700 flex items-center gap-2 mb-6">
               <BookOpen className="w-5 h-5 text-indigo-500" /> Carga Académica Semanal
             </h2>
             <div className="flex justify-around items-center mb-6">
               <div className="text-center">
-                <span className="block text-4xl font-bold text-slate-800">{data.pending}</span>
+                <span className="block text-4xl font-bold text-slate-800">{pending}</span>
                 <span className="text-sm font-medium text-slate-500">Pendientes</span>
               </div>
               <div className="w-px h-12 bg-slate-200"></div>
               <div className="text-center">
-                <span className="block text-4xl font-bold text-emerald-600">{data.completed}</span>
+                <span className="block text-4xl font-bold text-emerald-600">{completed}</span>
                 <span className="text-sm font-medium text-slate-500">Completadas</span>
               </div>
             </div>
-            <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-              <div className="bg-indigo-500 h-2.5 rounded-full transition-all duration-500" style={{ width: `${(data.completed / ((data.pending + data.completed) || 1)) * 100}%` }}></div>
-            </div>
           </div>
 
-          <div className="bg-indigo-600 rounded-xl shadow-md p-6 text-white flex flex-col justify-between">
-            <h2 className="text-lg font-semibold flex items-center gap-2"><Calendar className="w-5 h-5" /> Plan Sugerido (HU-09)</h2>
-            <p className="text-xs text-indigo-100 leading-relaxed">
-              Basado en tus prioridades, deberías empezar con:<br/>
-              <strong className="text-white text-sm underline">{data.urgent[0]?.title || 'Sin tareas urgentes'}</strong>
-            </p>
-            <button className="mt-4 bg-white text-indigo-600 w-full py-2.5 rounded-lg font-semibold hover:bg-indigo-50 transition-colors shadow-sm text-xs">
+          <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-md p-6 text-white flex flex-col justify-between">
+            <div>
+              <h2 className="text-lg font-semibold flex items-center gap-2 mb-2">
+                <Calendar className="w-5 h-5 text-indigo-100" /> Plan de Estudio (HU-11)
+              </h2>
+            </div>
+            <button 
+              onClick={() => setIsPlanModalOpen(true)}
+              className="mt-6 bg-white text-indigo-600 w-full py-2.5 rounded-lg font-semibold hover:bg-indigo-50 transition-colors shadow-sm"
+            >
               Ver Plan Diario (HU-11)
             </button>
           </div>
         </div>
 
-        {/* --- SECCIÓN PRIORIDAD INMEDIATA (HU-10 + HU-06/07) --- */}
-        <div>
-          <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 mb-4">
-            <Star className="w-5 h-5 text-amber-500 fill-amber-500" /> Prioridad Inmediata
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {data.urgent.map(task => (
-              <div key={task.id_canvas} className="bg-white rounded-xl p-5 border border-slate-200 shadow-sm relative group hover:border-slate-300 transition-all">
-                <div className="flex justify-between items-start mb-3">
-                  <div className="flex gap-2">
-                    {/* Texto completo "Prioridad" y diseño unificado */}
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${task.importancia >= 4 ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-600'}`}>
-                      Prioridad {task.importancia}
-                    </span>
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                      task.dificultad === 'alta' ? 'bg-rose-100 text-rose-600' : 
-                      task.dificultad === 'media' ? 'bg-amber-100 text-amber-600' : 'bg-emerald-100 text-emerald-600'
-                    }`}>
-                      {task.dificultad}
-                    </span>
-                  </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => openEdit(task)} className="text-slate-400 hover:text-indigo-600"><Edit3 size={16}/></button>
+        {/* Tarjetas Atrasadas */}
+        {overdue.length > 0 && (
+          <div>
+            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 mb-4">
+              <AlertTriangle className="w-5 h-5 text-rose-600" /> Tareas Atrasadas
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {overdue.map(task => (
+                <div key={task.id_canvas} className="bg-rose-50 rounded-xl p-5 border border-rose-200 shadow-sm relative">
+                  <div className="absolute top-0 left-0 w-1.5 h-full bg-rose-600"></div>
+                  <h3 className="font-semibold text-rose-900 line-clamp-2">{task.title}</h3>
+                  <p className="text-sm text-rose-700 mt-1">{task.course_name}</p>
+                  <div className="flex justify-between items-center mt-4 pt-3 border-t border-rose-200">
+                    <button onClick={() => toggleComplete(task.id_canvas)} className="text-rose-700 hover:underline text-sm font-medium">
+                      Completar
+                    </button>
+                    <button onClick={() => deleteTask(task.id_canvas)} className="text-rose-400 hover:text-rose-700">
+                      <Trash2 className="w-5 h-5" />
+                    </button>
                   </div>
                 </div>
-                <h3 className="font-bold text-slate-800 mb-1 line-clamp-1">{task.title}</h3>
-                <p className="text-xs text-slate-500 mb-5">{task.course_name}</p>
-                <div className="flex items-center justify-between text-xs mt-auto">
-                  <div className="flex items-center gap-1.5 text-rose-600 font-semibold">
-                    <Clock className="w-4 h-4" />
-                    Vence en {Math.ceil(task.hoursLeft)}h
-                  </div>
-                  <button onClick={() => setTasks(tasks.map(t => t.id_canvas === task.id_canvas ? {...t, completada: true} : t))} className="text-indigo-600 hover:text-indigo-700 font-bold">Completar</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* HU-04: ORGANIZACIÓN POR CURSOS (CON MEJORAS DE USABILIDAD Y HU-06) */}
-        <section className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold text-slate-800">📚 Mis Cursos</h2>
-            <div className="flex gap-2">
-              <button onClick={() => setFilter('todas')} className={`text-[10px] px-3 py-1 rounded-full font-bold transition-all ${filter === 'todas' ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-600'}`}>TODAS</button>
-              <button onClick={() => setFilter('pendientes')} className={`text-[10px] px-3 py-1 rounded-full font-bold transition-all ${filter === 'pendientes' ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-600'}`}>PENDIENTES</button>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {Object.entries(data.tasksByCourse).map(([course, courseTasks]) => (
-              <div key={course} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="font-bold text-indigo-600 text-sm uppercase tracking-wider">{course}</h3>
-                  <span className="text-[10px] font-bold text-slate-400">{courseTasks.length} Tareas</span>
-                </div>
-                <div className="space-y-3">
-                  {courseTasks.filter(t => filter === 'todas' || (filter === 'pendientes' && !t.completada)).map(t => (
-                    <div key={t.id_canvas} className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition-colors group border border-transparent hover:border-slate-100">
-                      <div className="flex items-center gap-3">
-                        {/* MEJORA: BOTÓN DE COMPLETADO RÁPIDO */}
-                        <button 
-                          onClick={() => setTasks(tasks.map(task => task.id_canvas === t.id_canvas ? {...task, completada: !task.completada} : task))}
-                          className={`transition-colors ${t.completada ? 'text-emerald-500' : 'text-slate-300 hover:text-emerald-400'}`}
-                        >
-                          <CheckCircle size={20} fill={t.completada ? "currentColor" : "none"} />
-                        </button>
-                        
-                        <div className="flex flex-col">
-                          <span className={`text-sm font-medium ${t.completada ? 'line-through text-slate-300' : 'text-slate-700'}`}>
-                            {t.title}
-                          </span>
-                          {/* MEJORA HU-06: VISIBILIDAD DE DIFICULTAD */}
-                          <span className={`text-[9px] font-bold uppercase mt-0.5 ${
-                            t.dificultad === 'alta' ? 'text-rose-500' : 
-                            t.dificultad === 'media' ? 'text-amber-500' : 'text-emerald-500'
-                          }`}>
-                            • {t.dificultad}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-slate-400 font-medium">
-                          {new Date(t.due_at).toLocaleDateString()}
-                        </span>
-                        <button onClick={() => openEdit(t)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-indigo-600 p-1 transition-all">
-                          <Edit3 size={14}/>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* MODAL DEL FORMULARIO COMPLETO (HU-01, HU-02, HU-03, HU-06, HU-07) */}
-        {isFormOpen && (
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative animate-in fade-in zoom-in duration-200">
-              <button onClick={closeForm} className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 transition-colors">
-                <X size={24} />
-              </button>
-              
-              <h2 className="text-2xl font-bold text-slate-900 mb-6 tracking-tight">
-                {editingTask ? 'Editar Tarea' : 'Nueva Tarea Académica'}
-              </h2>
-              
-              <form onSubmit={handleSave} className="space-y-5">
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Título de la Tarea</label>
-                  <input required value={newTitle} onChange={(e) => setNewTitle(e.target.value)} type="text" placeholder="Ej: Proyecto Final" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all" />
-                </div>
-                
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Nombre del Curso</label>
-                  <input required value={newCourse} onChange={(e) => setNewCourse(e.target.value)} type="text" placeholder="Ej: Ingeniería de Software" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all" />
-                </div>
-                
-                <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Fecha y Hora de Entrega</label>
-                  <input required value={newDate} onChange={(e) => setNewDate(e.target.value)} type="datetime-local" className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all" />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Dificultad (HU-06)</label>
-                    <select value={newDiff} onChange={(e) => setNewDiff(e.target.value as any)} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
-                      <option value="baja">Baja</option>
-                      <option value="media">Media</option>
-                      <option value="alta">Alta</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-400 uppercase mb-2 ml-1">Importancia (1-5)</label>
-                    <input required type="number" min="1" max="5" value={newImp} onChange={(e) => setNewImp(Number(e.target.value))} className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-sm" />
-                  </div>
-                </div>
-
-                <button type="submit" className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-lg active:scale-[0.98] mt-2">
-                  {editingTask ? 'Actualizar Información' : 'Registrar Tarea'}
-                </button>
-              </form>
+              ))}
             </div>
           </div>
         )}
 
+        {/* Tarjetas Urgentes */}
+        {urgent.length > 0 && (
+          <div>
+            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2 mb-4">
+              <Clock className="w-5 h-5 text-orange-500" /> Prioridad Inmediata
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {urgent.map(task => (
+                <div key={task.id_canvas} className="bg-white rounded-xl p-5 border border-orange-200 shadow-sm relative">
+                  <div className="absolute top-0 left-0 w-1.5 h-full bg-orange-500"></div>
+                  <span className="text-xs font-semibold text-orange-700 bg-orange-50 px-2 py-0.5 rounded">
+                    Vence en {Math.max(0, Math.ceil(task.hoursLeft))}h
+                  </span>
+                  <h3 className="font-semibold text-slate-800 mt-2 line-clamp-2">{task.title}</h3>
+                  <p className="text-sm text-slate-500 mt-1">{task.course_name}</p>
+                  <div className="flex justify-between items-center mt-4 pt-3 border-t border-slate-100">
+                    <button onClick={() => toggleComplete(task.id_canvas)} className="text-indigo-600 hover:underline text-sm font-medium">
+                      Completar
+                    </button>
+                    <button onClick={() => deleteTask(task.id_canvas)} className="text-slate-400 hover:text-rose-600">
+                      <Trash2 className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Tabla General "Mis Cursos" con Filtros de la HU-04 */}
+        <div>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+              <BookOpen className="w-5 h-5 text-slate-500" /> Mis Cursos
+            </h2>
+            <div className="flex gap-2">
+              {courses.map(c => (
+                <button 
+                  key={c} 
+                  onClick={() => setFilterCourse(c)}
+                  className={`px-3 py-1 text-xs font-semibold rounded-full transition-colors ${filterCourse === c ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-700 hover:bg-slate-300'}`}
+                >
+                  {c}
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-sm text-slate-600">
+                  <th className="p-4 font-medium">Estado</th>
+                  <th className="p-4 font-medium">Tarea</th>
+                  <th className="p-4 font-medium">Curso</th>
+                  <th className="p-4 font-medium text-right">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTasks.map(task => (
+                  <tr key={task.id_canvas} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
+                    <td className="p-4">
+                      <button onClick={() => toggleComplete(task.id_canvas)} className={task.completada ? 'text-emerald-500' : 'text-slate-300'}>
+                        <CheckCircle className="w-6 h-6" />
+                      </button>
+                    </td>
+                    <td className={`p-4 font-medium ${task.completada ? 'text-slate-400 line-through' : 'text-slate-800'}`}>
+                      {task.title}
+                    </td>
+                    <td className="p-4 text-slate-600 text-sm">{task.course_name}</td>
+                    <td className="p-4 text-right">
+                      <div className="flex items-center justify-end gap-3">
+                        <button onClick={() => openEditModal(task)} className="text-slate-400 hover:text-indigo-600">
+                          <Edit className="w-5 h-5" />
+                        </button>
+                        <button onClick={() => deleteTask(task.id_canvas)} className="text-slate-400 hover:text-rose-600">
+                          <Trash2 className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
       </div>
+
+      {/* Modal Formulario */}
+      {isTaskModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="flex justify-between items-center p-5 border-b border-slate-100">
+              <h3 className="font-bold text-lg text-slate-800">{editingTask ? 'Editar Tarea' : 'Nueva Tarea'}</h3>
+              <button onClick={closeTaskModal} className="text-slate-400 hover:text-slate-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleSaveTask} className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Título de la Tarea</label>
+                <input required name="title" defaultValue={editingTask?.title} type="text" className="w-full border border-slate-300 rounded-lg px-3 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Curso</label>
+                <input required name="course_name" defaultValue={editingTask?.course_name} type="text" className="w-full border border-slate-300 rounded-lg px-3 py-2" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Fecha de Entrega</label>
+                <input required name="due_at" defaultValue={editingTask ? new Date(editingTask.due_at).toISOString().slice(0,16) : ''} type="datetime-local" className="w-full border border-slate-300 rounded-lg px-3 py-2" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Dificultad</label>
+                  <select name="dificultad" defaultValue={editingTask?.dificultad || 'media'} className="w-full border border-slate-300 rounded-lg px-3 py-2">
+                    <option value="baja">Baja</option>
+                    <option value="media">Media</option>
+                    <option value="alta">Alta</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Importancia (1-5)</label>
+                  <input required name="importancia" defaultValue={editingTask?.importancia || 3} type="number" min="1" max="5" className="w-full border border-slate-300 rounded-lg px-3 py-2" />
+                </div>
+              </div>
+              <div className="pt-4 flex justify-end gap-3">
+                <button type="button" onClick={closeTaskModal} className="px-4 py-2 text-slate-600 font-medium">Cancelar</button>
+                <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-medium">Guardar Tarea</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Plan Diario */}
+      {isPlanModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+            <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-6 text-white flex justify-between items-start">
+              <div>
+                <h3 className="font-bold text-xl flex items-center gap-2"><Target className="w-6 h-6" /> Plan de Estudio Sugerido</h3>
+                <p className="text-indigo-100 text-sm mt-1">Bloques generados basados en dificultad y urgencia (Técnica Pomodoro).</p>
+              </div>
+              <button onClick={() => setIsPlanModalOpen(false)} className="text-white/80 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              {studyBlocks.map((block, idx) => (
+                <div key={idx} className="flex items-center justify-between border border-slate-200 p-4 rounded-xl bg-slate-50">
+                  <div>
+                    <h4 className="font-semibold text-slate-800 line-clamp-1">{block.task.title}</h4>
+                    <p className="text-sm text-slate-500">{block.task.course_name} • {block.pomodoros} Pomodoros</p>
+                  </div>
+                  <div className="bg-indigo-100 text-indigo-700 font-semibold px-3 py-1.5 rounded-lg text-sm">
+                    {block.time}
+                  </div>
+                </div>
+              ))}
+              <button onClick={() => setIsPlanModalOpen(false)} className="w-full mt-4 bg-slate-900 text-white py-3 rounded-lg font-medium">
+                Entendido, empezaré ahora
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
